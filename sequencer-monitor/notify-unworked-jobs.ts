@@ -29,10 +29,21 @@ const sequencerMonitor = new SequencerMonitor(
 );
 
 interface SequencerMonitorEvent {
+  /** The block number to monitor. */
   blockNumber: BigNumberish;
 }
 
-export const handler: Handler = async (event: SequencerMonitorEvent) => {
+/**
+ * AWS Lambda handler function that monitors unworked jobs in the sequencer
+ * and sends notifications if any jobs remain unworked for a specified number
+ * of consecutive blocks.
+ *
+ * @param {SequencerMonitorEvent} event - The event object containing the block number to monitor.
+ * @returns {Promise<void>} - A promise that resolves when the job monitoring process completes.
+ */
+export const handler: Handler = async (
+  event: SequencerMonitorEvent
+): Promise<void> => {
   await sequencerMonitor.monitorUnworkableJobs(
     event.blockNumber,
     Number(process.env.CONSEQUENT_WORKABLE_JOBS_LIMIT!)
