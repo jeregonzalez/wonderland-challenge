@@ -1,7 +1,7 @@
 const AWS = require("aws-sdk");
 
 const lambda = new AWS.Lambda({
-  endpoint: "http://localhost:3002",
+  endpoint: "http://localhost:3003",
   region: "us-west-2",
 });
 

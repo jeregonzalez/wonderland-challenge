@@ -1,5 +1,6 @@
 import { BigNumberish, ethers } from "ethers";
 
+import { Notifier } from "./notifier";
 import { SequencerMonitorRepository } from "../repositories/sequencer-monitor";
 import sequencerAbi from "../abis/sequencer-abi.json";
 import workableAbi from "../abis/workable-abi.json";
@@ -11,7 +12,8 @@ export class SequencerMonitor {
   constructor(
     protected readonly ethersProvider: ethers.AbstractProvider,
     protected readonly sequencerAddress: string,
-    protected sequencerMonitorRepository: SequencerMonitorRepository
+    protected sequencerMonitorRepository: SequencerMonitorRepository,
+    protected notifier: Notifier
   ) {
     this.sequencerContract = new ethers.Contract(
       this.sequencerAddress,
@@ -24,6 +26,8 @@ export class SequencerMonitor {
     blockNumber: BigNumberish,
     consequentBlocksLimit: number
   ) {
+    console.log("Monitoring sequencer at block number", blockNumber);
+
     console.log("Getting job addresses...");
     const jobAddresses = await this.getJobAddresses(blockNumber);
 
@@ -37,11 +41,16 @@ export class SequencerMonitor {
       jobAddresses
     );
 
-    console.log("Handling consecutive workable blocks...");
-    await this.handleConsecutiveWorkableBlocks(
+    console.log("Handling consequent workable blocks...");
+    const unworkedJobs = await this.handleConsecutiveWorkableBlocks(
       workableStatusesByNetwork,
       consequentBlocksLimit
     );
+
+    if (unworkedJobs.length > 0) {
+      console.log("Notifying unworked jobs...");
+      await this.notifyUnworkedJobs(unworkedJobs, consequentBlocksLimit);
+    }
   }
 
   protected async getJobAddresses(
@@ -118,6 +127,7 @@ export class SequencerMonitor {
     const consequentWorkableBlocks =
       await this.sequencerMonitorRepository.getConsequentWorkableBlocks();
 
+    const unworkedJobs: { network: string; jobAddress: string }[] = [];
     for (const network in workableStatusesByNetwork) {
       const workableStatuses = workableStatusesByNetwork[network];
 
@@ -129,9 +139,7 @@ export class SequencerMonitor {
           consequentWorkableBlocks[networkJob] =
             (consequentWorkableBlocks[networkJob] ?? 0) + 1;
           if (consequentWorkableBlocks[networkJob] >= consequentBlocksLimit) {
-            console.log(
-              `Job ${jobAddress} on network ${network} has not been worked for 10 consecutive blocks`
-            );
+            unworkedJobs.push({ network, jobAddress });
           }
         } else {
           if (consequentWorkableBlocks[networkJob] > 0) {
@@ -143,6 +151,22 @@ export class SequencerMonitor {
 
     await this.sequencerMonitorRepository.setConsequentWorkableBlocks(
       consequentWorkableBlocks
+    );
+
+    return unworkedJobs;
+  }
+
+  protected async notifyUnworkedJobs(
+    unworkedJobs: { network: string; jobAddress: string }[],
+    consequentBlocksLimit: number
+  ) {
+    await this.notifier.notify(
+      `The following jobs have not been worked for more than ${consequentBlocksLimit} blocks:\n${unworkedJobs
+        .map(
+          ({ network, jobAddress }) =>
+            `Network: ${network} - Job: ${jobAddress}`
+        )
+        .join("\n")}`
     );
   }
 }
