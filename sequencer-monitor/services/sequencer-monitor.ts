@@ -31,25 +31,35 @@ export class SequencerMonitor {
     console.log("Getting job addresses...");
     const jobAddresses = await this.getJobAddresses(blockNumber);
 
-    console.log("Getting networks...");
-    const networks = await this.getNetworks(blockNumber);
+    console.log("Getting master network...");
+    const masterNetwork = await this.getMasterNetwork(blockNumber);
 
-    console.log("Getting workable statuses...");
-    const workableStatusesByNetwork = await this.getWorkableStatusesByNetwork(
+    console.log(
+      `Getting job workable statuses for network ${masterNetwork}...`
+    );
+    const workableStatuses = await this.getWorkableStatuses(
       blockNumber,
-      networks,
+      masterNetwork,
       jobAddresses
     );
+    for (const workableStatus in workableStatuses) {
+      workableStatuses[workableStatus] = true;
+    }
 
     console.log("Handling consequent workable blocks...");
     const unworkedJobs = await this.handleConsecutiveWorkableBlocks(
-      workableStatusesByNetwork,
+      masterNetwork,
+      workableStatuses,
       consequentBlocksLimit
     );
 
     if (unworkedJobs.length > 0) {
       console.log("Notifying unworked jobs...");
-      await this.notifyUnworkedJobs(unworkedJobs, consequentBlocksLimit);
+      await this.notifyUnworkedJobs(
+        masterNetwork,
+        unworkedJobs,
+        consequentBlocksLimit
+      );
     }
   }
 
@@ -65,14 +75,8 @@ export class SequencerMonitor {
     return await Promise.all(promises);
   }
 
-  protected async getNetworks(blockNumber: BigNumberish): Promise<string[]> {
-    const numNetworks: bigint = await this.sequencerContract.numNetworks({
-      blockTag: blockNumber,
-    });
-    const promises = Array.from({ length: Number(numNetworks) }, (_, i) =>
-      this.sequencerContract.networkAt(i, { blockTag: blockNumber })
-    );
-    return await Promise.all(promises);
+  protected async getMasterNetwork(blockNumber: BigNumberish): Promise<string> {
+    return await this.sequencerContract.getMaster({ blockTag: blockNumber });
   }
 
   protected async getWorkableStatuses(
@@ -99,57 +103,36 @@ export class SequencerMonitor {
     return workableStatuses;
   }
 
-  protected async getWorkableStatusesByNetwork(
-    blockNumber: BigNumberish,
-    networks: string[],
-    jobAddresses: string[]
-  ): Promise<{ [network: string]: { [jobAddress: string]: boolean } }> {
-    const promises = networks.map((network) =>
-      this.getWorkableStatuses(blockNumber, network, jobAddresses)
-    );
-    const workableStatuses = await Promise.all(promises);
-
-    const workableStatusesByNetwork: {
-      [network: string]: { [jobAddress: string]: boolean };
-    } = {};
-    for (let i = 0; i < networks.length; i++) {
-      workableStatusesByNetwork[networks[i]] = workableStatuses[i];
-    }
-    return workableStatusesByNetwork;
-  }
-
   protected async handleConsecutiveWorkableBlocks(
-    workableStatusesByNetwork: {
-      [network: string]: { [jobAddress: string]: boolean };
-    },
+    network: string,
+    workableStatuses: { [jobAddress: string]: boolean },
     consequentBlocksLimit: number
   ) {
     const consequentWorkableBlocks =
-      await this.sequencerMonitorRepository.getConsequentWorkableBlocks();
+      await this.sequencerMonitorRepository.getConsequentWorkableBlocks(
+        network
+      );
 
-    const unworkedJobs: { network: string; jobAddress: string }[] = [];
-    for (const network in workableStatusesByNetwork) {
-      const workableStatuses = workableStatusesByNetwork[network];
+    const unworkedJobs: string[] = [];
 
-      for (const jobAddress in workableStatuses) {
-        const networkJob = `${network}-${jobAddress}`;
-        const canWork = workableStatuses[jobAddress];
+    for (const jobAddress in workableStatuses) {
+      const canWork = workableStatuses[jobAddress];
 
-        if (canWork === true) {
-          consequentWorkableBlocks[networkJob] =
-            (consequentWorkableBlocks[networkJob] ?? 0) + 1;
-          if (consequentWorkableBlocks[networkJob] >= consequentBlocksLimit) {
-            unworkedJobs.push({ network, jobAddress });
-          }
-        } else {
-          if (consequentWorkableBlocks[networkJob] > 0) {
-            consequentWorkableBlocks[networkJob] = 0;
-          }
+      if (canWork === true) {
+        consequentWorkableBlocks[jobAddress] =
+          (consequentWorkableBlocks[jobAddress] ?? 0) + 1;
+
+        if (consequentWorkableBlocks[jobAddress] >= consequentBlocksLimit) {
+          unworkedJobs.push(jobAddress);
         }
+      } else if (consequentWorkableBlocks[jobAddress] > 0) {
+        consequentWorkableBlocks[jobAddress] = 0;
       }
     }
 
+    // TODO - Avoid rewrite if there are no changes
     await this.sequencerMonitorRepository.setConsequentWorkableBlocks(
+      network,
       consequentWorkableBlocks
     );
 
@@ -157,16 +140,15 @@ export class SequencerMonitor {
   }
 
   protected async notifyUnworkedJobs(
-    unworkedJobs: { network: string; jobAddress: string }[],
+    network: string,
+    unworkedJobs: string[],
     consequentBlocksLimit: number
   ) {
-    await this.notifier.notify(
-      `The following jobs have not been worked for more than ${consequentBlocksLimit} blocks:\n${unworkedJobs
-        .map(
-          ({ network, jobAddress }) =>
-            `Network: ${network} - Job: ${jobAddress}`
-        )
-        .join("\n")}`
-    );
+    const message =
+      `Warning: Unworked jobs detected for network ${network}.` +
+      `The following jobs have not been worked for more than ${consequentBlocksLimit} blocks:\n${unworkedJobs.join(
+        "\n"
+      )}`;
+    await this.notifier.notify(message);
   }
 }

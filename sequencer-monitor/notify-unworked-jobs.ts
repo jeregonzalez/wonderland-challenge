@@ -7,11 +7,7 @@ import { Handler } from "aws-lambda";
 import { SequencerMonitor } from "./services/sequencer-monitor";
 
 // Initialize resources
-const provider = new ethers.JsonRpcProvider(
-  process.env.RPC_NODE_URL,
-  undefined,
-  { batchMaxCount: 5 }
-);
+const provider = new ethers.JsonRpcProvider(process.env.RPC_NODE_URL);
 
 const docClient = new AWS.DynamoDB.DocumentClient({
   endpoint: process.env.DYNAMODB_ENDPOINT_URL,

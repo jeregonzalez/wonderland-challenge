@@ -1,12 +1,15 @@
 import AWS from "aws-sdk";
 
 export interface SequencerMonitorRepository {
-  getConsequentWorkableBlocks(): Promise<{
-    [networkJob: string]: number;
+  getConsequentWorkableBlocks(network: string): Promise<{
+    [jobAddress: string]: number;
   }>;
-  setConsequentWorkableBlocks(consequentWorkableBlocks: {
-    [networkJob: string]: number;
-  }): Promise<void>;
+  setConsequentWorkableBlocks(
+    network: string,
+    consequentWorkableBlocks: {
+      [jobAddress: string]: number;
+    }
+  ): Promise<void>;
 }
 
 export class DDBSequencerMonitorRepository
@@ -19,24 +22,27 @@ export class DDBSequencerMonitorRepository
     private readonly docClient: AWS.DynamoDB.DocumentClient
   ) {}
 
-  async getConsequentWorkableBlocks(): Promise<{
-    [networkJob: string]: number;
+  async getConsequentWorkableBlocks(network: string): Promise<{
+    [jobAddress: string]: number;
   }> {
     const params = {
       TableName: this.tableName,
-      Key: { sequencer_address: this.sequencerAddress },
+      Key: { network },
     };
     const result = await this.docClient.get(params).promise();
     return result.Item?.consequent_workable_blocks ?? {};
   }
 
-  async setConsequentWorkableBlocks(consequentWorkableBlocks: {
-    [networkJob: string]: number;
-  }): Promise<void> {
+  async setConsequentWorkableBlocks(
+    network: string,
+    consequentWorkableBlocks: {
+      [jobAddress: string]: number;
+    }
+  ): Promise<void> {
     const params = {
       TableName: this.tableName,
       Item: {
-        sequencer_address: this.sequencerAddress,
+        network,
         consequent_workable_blocks: consequentWorkableBlocks,
       },
     };

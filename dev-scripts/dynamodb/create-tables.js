@@ -13,10 +13,8 @@ const dynamodb = new AWS.DynamoDB();
 // Define the table schema
 const tableParams = {
   TableName: "consequent-workable-blocks",
-  KeySchema: [{ AttributeName: "sequencer_address", KeyType: "HASH" }],
-  AttributeDefinitions: [
-    { AttributeName: "sequencer_address", AttributeType: "S" },
-  ],
+  KeySchema: [{ AttributeName: "network", KeyType: "HASH" }],
+  AttributeDefinitions: [{ AttributeName: "network", AttributeType: "S" }],
   ProvisionedThroughput: {
     ReadCapacityUnits: 10,
     WriteCapacityUnits: 10,
