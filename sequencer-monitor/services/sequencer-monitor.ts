@@ -60,9 +60,6 @@ export class SequencerMonitor {
       masterNetwork,
       jobAddresses
     );
-    for (const workableStatus in workableStatuses) {
-      workableStatuses[workableStatus] = true;
-    }
 
     console.log("Handling consequent workable blocks...");
     const unworkedJobs = await this.handleConsecutiveWorkableBlocks(

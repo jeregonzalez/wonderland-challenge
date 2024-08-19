@@ -73,3 +73,4 @@ To deploy this application in a cloud production environment, it's recommended t
 - Enhance error handling for better reliability and debugging.
 - In the local environment, ensure that the **block-listener** only calls the **sequencer-monitor** after it has been started.
 - Update lambda handler to parse data from an API Gateway event.
+- Use logger library

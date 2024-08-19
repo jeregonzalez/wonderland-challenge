@@ -27,7 +27,7 @@ export class DiscordNotifier implements Notifier {
     }
 
     try {
-      axios.post(this.webhookUrl, { content: message });
+      await axios.post(this.webhookUrl, { content: message });
     } catch (error) {
       console.error("Error notifying discord", error);
     }
